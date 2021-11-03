@@ -1,6 +1,6 @@
 {
     "compilerOptions": {
-        "module": "es6",
+        "module": "es2020",
         "target": "es5",
         "jsx": "react",
         "lib": ["es6", "dom"],
@@ -16,7 +16,7 @@
     ],
     "ts-node": {
         "compilerOptions": {
-            "module": "commonjs" 
+            "module": "commonjs"
         }
     }
 }

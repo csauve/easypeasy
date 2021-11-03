@@ -4,13 +4,18 @@ import gulp from "gulp";
 import transform from "gulp-transform";
 import yaml from "js-yaml";
 import rename from "gulp-rename";
+import named from "vinyl-named";
 import del from "del";
 import sass from "sass";
+import webpackStream from "webpack-stream";
 import {Worker} from "worker_threads";
+
+import runServer from "./server";
 
 const paths = {
   dist: "./dist",
   distAssets: "./dist/assets",
+  scriptEntries: ["./src/assets/script.tsx"],
   stylesEntry: "./src/assets/style.scss",
   watchStyles: ["./src/**/*.scss"],
   pages: ["./src/pages/**/*.yml"],
@@ -36,7 +41,7 @@ function staticAssets() {
 function pages() {
   return gulp.src(paths.pages)
     .pipe(transform("utf8", (ymlSrc) => {
-      const worker = new Worker("./src/build/renderWorker.js", {
+      const worker = new Worker("./renderWorker.js", {
         workerData: yaml.load(ymlSrc)
       });
       return new Promise<string>((resolve, reject) => {
@@ -55,26 +60,51 @@ function styles() {
       if (err) {
         reject(err);
       } else {
-        fs.mkdirSync(paths.dist, {recursive: true});
-        fs.writeFileSync(path.join(paths.dist, "style.css"), res.css, "utf8");
+        fs.mkdirSync(paths.distAssets, {recursive: true});
+        fs.writeFileSync(path.join(paths.distAssets, "style.css"), res.css, "utf8");
         resolve();
       }
     });
   });
 }
 
+function scripts() {
+  return gulp.src(paths.scriptEntries)
+    .pipe(named())
+    .pipe(webpackStream({
+      watch: true,
+      mode: "development",
+      module: {
+        rules: [
+          {
+            test: /\.[tj]sx?$/,
+            use: "ts-loader",
+            exclude: /node_modules/,
+          },
+        ],
+      },
+      resolve: {
+        extensions: [".tsx", ".ts", ".js", ".jsx"],
+      },
+      output: {
+        filename: "[name].js"
+      }
+    }))
+    .pipe(gulp.dest(paths.distAssets));
+}
+
 function watch() {
   gulp.watch(paths.watchStyles, styles);
   gulp.watch(paths.staticAssets, staticAssets);
   gulp.watch(paths.watchPages, pages);
-  // runServer();
+  runServer();
 }
 
-const build = gulp.series(clean, gulp.parallel(
-  styles,
-  staticAssets,
-  pages
-));
-const dev = gulp.series(build, watch);
-
-export default dev;
+export default gulp.series(
+  gulp.series(clean, gulp.parallel(
+    styles,
+    staticAssets,
+    pages
+  )),
+  gulp.parallel(watch, scripts)
+);
